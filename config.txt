@@ -1,0 +1,230 @@
+D1
+-----------------
+interface vlan 10
+standby version 2
+standby 10 ip 172.16.10.254
+standby 10 priority 150
+standby 10 preempt
+ex
+
+interface vlan 30
+standby version 2
+standby 30 ip 172.16.30.254
+standby 30 preempt
+end
+show standby brief
+D1 should be the active switch for VLAN 10 only
+=======================================
+D2
+-----------------
+
+interface vlan 30
+standby version 2
+standby 30 ip  172.16.30.254
+standby 30 priority 150
+standby 30 preempt
+
+interface vlan 10
+standby version 2
+standby 10 ip 172.16.10.254
+standby 10 preempt
+end
+show standby brief
+D2 should be the active switch for VLAN 20 only.
+
+================================
+
+
+A1
+------------
+ip default-gateway 172.16.10.254
+
+
+==========================
+R1
+------------
+router eigrp 100
+ eigrp router-id 1.1.1.1
+ network 10.0.0.0 255.255.0.0
+ passive-interface default
+ no passive-interface s0/1/0
+ no passive-interface g0/0/0
+ no passive-interface g0/0/1
+ exit
+
+Implement GRE over IPsec Site-to-Site VPNs
+---+++--------
+crypto isakmp policy 10
+encryption aes 256
+hash sha256
+authentication pre-share
+group 14
+lifetime 3600
+exit
+crypto isakmp key cisco123 address 10.0.20.1
+crypto ipsec transform-set GRE-VPN esp-aes 256 esp-sha256-hmac
+mode transport
+ex
+ip access-list extended GRE-VPN-ACL
+permit gre host 10.0.10.1 host 10.0.20.1
+exit
+
+crypto map GRE-CMAP 10 ipsec-isakmp
+match address GRE-VPN-ACL
+set transform-set GRE-VPN
+set peer 10.0.20.1
+exit 
+ 
+interface  s0/1/0
+crypto map GRE-CMAP
+
+interface tunnel 1
+ip address 192.168.60.1 255.255.255.252
+bandwidth 4000
+ip mtu 1400
+tunnel source 10.0.10.1
+tunnel destination 10.0.20.1
+exit
+=====
+
+Ipsec
+-----
+access-list 110 permit ip 10.0.10.1 0.0.0.255 10.0.20.1 0.0.0.255
+crypto isakmp policy 10
+encryption aes 256
+hash sha
+authentication pre-share
+group 5
+exit
+
+crypto isakmp key cisco123 address 10.0.20.1
+crypto ipsec transform-set GRE-VPN esp-aes 256 esp-sha-hmac
+
+crypto map VPN-MAP 10 ipsec-isakmp
+set transform-set VPN-SET
+set peer 10.0.20.1
+match address 110
+
+exit 
+ 
+interface  s0/1/0
+crypto map VPN-MAP
+
+
+=======
+GRE
+-----
+interface loopback 0
+ip address 10.0.10.10 255.255.255.0
+ no shutdown
+ex
+
+interface tunnel 10
+ip address 192.168.60.1 255.255.255.252
+tunnel source loopback 0
+tunnel destination 10.0.20.1
+ip route 0.0.0.0 0.0.0.0 Loopback0 tunnel 10
+
+
+
+============================================
+
+R2
+-------------
+router eigrp 100
+ eigrp router-id 2.2.2.2
+ network 10.0.0.0 255.255.0.0
+ passive-interface default
+ no passive-interface s0/1/0
+ no passive-interface s0/1/1
+ exit
+
+
+===================================
+R3
+------------
+router eigrp 100
+ eigrp router-id 3.3.3.3
+ network 192.168.40.0 0.0.0.255 
+ network 192.168.50.0 0.0.0.255 
+ network 10.0.20.0 0.0.0.3
+
+ passive-interface default
+ no passive-interface s0/1/1
+ no passive-interface g0/0/0.40
+ no passive-interface g0/0/0.50
+ exit
+
+
+
+Implement GRE over IPsec Site-to-Site VPNs
+---+++--------
+crypto isakmp policy 10
+encryption aes 256
+hash sha256
+authentication pre-share
+group 14
+lifetime 3600
+exit
+
+crypto isakmp key cisco123 address 10.0.10.1
+crypto ipsec transform-set GRE-VPN esp-aes 256 esp-sha256-hmac
+mode transport
+ex
+
+crypto ipsec profile GRE-PROFILE
+set transform-set GRE-VPN
+exit
+
+interface tunnel 1
+ip address 192.168.60.2 255.255.255.252
+bandwidth 4000
+ip mtu 1400
+tunnel source 10.0.20.1
+tunnel destination 10.0.10.1
+tunnel protection ipsec profile GRE-PROFILE
+end
+
+
+show interfaces tunnel 1
+
+ 
+
+
+
+IPsec
+---------
+crypto isakmp policy 10
+encryption aes 256
+hash sha
+authentication pre-share
+group 5
+exit
+
+crypto isakmp key cisco123 address 10.0.10.1
+crypto ipsec transform-set VPN-SET esp-aes 256 esp-sha256-hmac
+crypto map VPN-MAP 10 ipsec-isakmp
+
+set peer 10.0.20.1
+set transform-set VPN-SET
+match address 110
+exit
+interface S0/1/1
+crypto map VPN-MAP
+
+=========
+
+GRE
+-----
+interface loopback 1
+ip address 10.0.20.10 255.255.255.0
+ no shutdown
+interface tunnel 10
+ip address 100.100.100.1 255.255.255.252
+
+tunnel source loopback 1
+tunnel destination 10.0.10.1
+ex
+ip route 0.0.0.0 0.0.0.0 Loopback0 tunnel 10
+end
+show interface tunnel 10
